@@ -1,16 +1,11 @@
-#include "env.hpp"
 #include <Arduino.h>
-#include <SPIFFS.h>
 #include <WebSocketsClient.h>
-#include <WiFi.h>
 
-////////////////////////////////// variables /////////////////////////////////
+#include "auxiliars.hpp"
+#include "env.hpp"
+#include "wifi.hpp"
 
-String ssid = ENV_SSID;
-String pass = ENV_PASS;
 String switchStr = ENV_SWITCH;
-
-////////////////////////////// END of variables //////////////////////////////
 
 int uidLength = 22;  // length of lnurldevice id
 String urlPrefix;    // xx://
@@ -18,32 +13,23 @@ String lnbitsServer; // xxxx.xxx.xxx
 String apiUrl;       // /xxx/xx/xx/
 String deviceId;     // xxxxxxxxxxxx
 
+WebSocketsClient webSocket;
+
 String payloadStr;
 bool paid;
 int pinFromSocket;
 int delayFromSocket;
 
-WebSocketsClient webSocket;
-
 void setVariables();
-void blinkOnboardLed();
-String getValue(String data, char separator, int index);
 void webSocketEvent(WStype_t type, uint8_t *payload, size_t length);
 
 void setup() {
-  Serial.begin(115200);         // Start serial communication
-  pinMode(LED_BUILTIN, OUTPUT); // To blink onboard LED for status
+  Serial.begin(115200); // Start serial communication
 
   //// Conection to WiFi ////
-  Serial.print("Conecting to WiFi");
-  WiFi.begin(ssid.c_str(), pass.c_str());
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    blinkOnboardLed();
-    delay(700);
-  }
-  Serial.println("");
-  Serial.println("Connected to WiFi: " + ssid);
+  Serial.println("Conecting to WiFi...");
+  conectWiFi(ENV_SSID, ENV_PASS);
+  Serial.println("Connected to WiFi");
 
   //// Conection to websocket ///
   setVariables();
@@ -51,26 +37,20 @@ void setup() {
   webSocket.beginSSL(lnbitsServer, 443, apiUrl + deviceId);
   webSocket.onEvent(webSocketEvent);
   webSocket.setReconnectInterval(1000);
+  Serial.println("Connected to websocket");
 }
 
 void loop() {
-  //// Check WiFi conection ////
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print("Reconecting to WiFi");
-    WiFi.begin(ssid.c_str(), pass.c_str());
-    blinkOnboardLed();
-    Serial.print(".");
-    delay(200);
-  }
+  checkWiFi(ENV_SSID, ENV_PASS); // Check WiFi conection
 
   //// Check if recive pay /////
   while (paid == false) {
     webSocket.loop();
     if (paid) {
-      Serial.println("Payment recived");
       pinFromSocket = getValue(payloadStr, '-', 0).toInt();
       delayFromSocket = getValue(payloadStr, '-', 1).toInt();
 
+      Serial.println("Payment recived");
       pinMode(pinFromSocket, OUTPUT);
       digitalWrite(pinFromSocket, HIGH);
       delay(delayFromSocket);
@@ -81,7 +61,7 @@ void loop() {
   paid = false;
 }
 
-/////////////////// HELPERS ////////////////////
+/////////////////// HELPER ////////////////////
 
 void setVariables() {
   if (switchStr == NULL) {
@@ -98,32 +78,6 @@ void setVariables() {
   apiUrl = switchStr.substring(domainIndexEnd, switchStr.length() - uidLength);
 
   deviceId = switchStr.substring(switchStr.length() - uidLength);
-}
-
-void blinkOnboardLed() {
-  digitalWrite(LED_BUILTIN, HIGH);
-  delay(100);
-  digitalWrite(LED_BUILTIN, LOW);
-  delay(100);
-  digitalWrite(LED_BUILTIN, HIGH);
-  delay(100);
-  digitalWrite(LED_BUILTIN, LOW);
-}
-
-//// parset ////
-String getValue(String data, char separator, int index) {
-  int found = 0;
-  int strIndex[] = {0, -1};
-  int maxIndex = data.length() - 1;
-  for (int i = 0; i <= maxIndex && found <= index; i++) {
-    if (data.charAt(i) == separator || i == maxIndex) {
-      found++;
-      strIndex[0] = strIndex[1] + 1;
-      strIndex[1] = (i == maxIndex) ? i + 1 : i;
-    }
-  }
-
-  return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
 ////////////////// WEBSOCKET ///////////////////
