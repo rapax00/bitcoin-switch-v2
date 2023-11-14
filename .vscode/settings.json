@@ -1,5 +1,8 @@
 {
     "cmake.configureOnOpen": false,
     "idf.port": "/dev/ttyUSB0",
-    "idf.adapterTargetName": "esp32s2"
+    "idf.adapterTargetName": "esp32s2",
+    "files.associations": {
+        "string": "cpp"
+    }
 }
